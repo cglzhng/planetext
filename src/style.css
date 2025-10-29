@@ -1,3 +1,7 @@
+* {
+    box-sizing: border-box;
+}
+
 html {
     height: 100%;
 }
@@ -19,6 +23,11 @@ body {
 
 .text {
     cursor: text;
+    padding: 5px;
+}
+
+.textbox .text {
+    padding: 0;
 }
 
 .text,
@@ -31,8 +40,17 @@ body {
 
 .textbox {
     border: 5px solid #ccc;
-    margin: -5px;
     background: none;
     padding: 0;
     cursor: grab;
+}
+
+.group {
+    background: #ddd;
+    z-index: -2;
+}
+
+.preview-group {
+    background: #bbb;
+    z-index: -1;
 }
