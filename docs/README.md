@@ -1,3 +1,5 @@
 # PlaneText
 
-![demo](demo1.mp4)
+<video>
+<source src="demo1.mp4"/>
+</video>
