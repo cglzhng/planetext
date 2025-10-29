@@ -25,12 +25,17 @@ function startup() {
     base.style.width = `${CANVAS_WIDTH}px`;
     base.style.height = `${CANVAS_HEIGHT}px`;
 
-    set_viewport_width();
-    center_viewport();
+    reset_transform();
 
     base.addEventListener('click', create_text);
     base.addEventListener('wheel', zoom);
     base.addEventListener('mousedown', start_pan);
+}
+
+function reset_transform() {
+    base.style.transformOrigin = 'top left';
+    set_viewport_width();
+    center_viewport();
 }
 
 function set_viewport_width() {
@@ -57,19 +62,20 @@ function scale_base(s) {
 }  
 
 function transform_base() {
-    const x = -state.viewport_x / state.scale;
-    const y = -state.viewport_y / state.scale;
-    base.style.transform = `scale(${state.scale}) translate(${x}px, ${y}px) `;
+    const x = -state.viewport_x * state.scale;
+    const y = -state.viewport_y * state.scale;
+    base.style.transform = `translate(${x}px, ${y}px) scale(${state.scale})`;
 }
 
 function zoom(e) {
     e.preventDefault();
     const rect = base.getBoundingClientRect();
-    const center_offset_x = (e.clientX - rect.left) / state.scale - state.viewport_x;
-    const center_offset_y = (e.clientY - rect.top) / state.scale - state.viewport_y;
+    const center_x = (e.clientX - rect.left) / state.scale;
+    const center_y = (e.clientY - rect.top) / state.scale;
+    const dx = (center_x - state.viewport_x) * state.scale;
+    const dy = (center_y - state.viewport_y) * state.scale;
 
-
-    let scale = state.scale
+    let scale = state.scale;
     if (e.deltaY < 0) {
         scale *= ZOOM_SPEED;
     } else {
@@ -82,7 +88,7 @@ function zoom(e) {
         scale = MAX_ZOOM;
     }
 
-    //move_base(state.x - dx, state.y - dy);
+    move_viewport(center_x - dx / scale, center_y - dy / scale);
     scale_base(scale);
 }
 
@@ -90,16 +96,16 @@ function start_pan(e) {
     if (e.button !== 1) {
         return;
     }
-    let last_x = e.clientX;
-    let last_y = e.clientY;
+    const start_x = e.clientX;
+    const start_y = e.clientY;
+    const start_viewport_x = state.viewport_x;
+    const start_viewport_y = state.viewport_y;
     document.body.style.cursor = 'grabbing';
 
     const pan = (e) => {
-        const dx = e.clientX - last_x;
-        const dy = e.clientY - last_y;
-        move_viewport(state.viewport_x - dx, state.viewport_y - dy);
-        last_x = e.clientX;
-        last_y = e.clientY;
+        const dx = e.clientX - start_x;
+        const dy = e.clientY - start_y;
+        move_viewport(start_viewport_x - dx / state.scale, start_viewport_y - dy / state.scale);
     }
 
     const stop = () => {
@@ -112,9 +118,7 @@ function start_pan(e) {
     base.addEventListener('mousemove', pan);
     base.addEventListener('mouseleave', stop);
     base.addEventListener('mouseup', stop);
-
 }
-
 
 function create_text(e) {
     const input = document.createElement('input');
