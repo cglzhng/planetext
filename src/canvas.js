@@ -1,4 +1,5 @@
-import { generate_id } from './utils.js';
+import { generate_id, intersects } from './utils.js';
+import { History, Move, Create, Edit, Delete } from './history.js';
 
 const ZOOM_SPEED = 1.1;
 const MIN_ZOOM = 0.1;
@@ -31,9 +32,6 @@ class TextGroup {
         this.#box.style.position = 'absolute';
 
         this.#box.addEventListener('click', this.handle_click.bind(this));
-        //this.#box.addEventListener('mouseenter', this.handle_mouseenter.bind(this));
-        //this.#box.addEventListener('mouseout', this.handle_mouseout.bind(this));
-        //this.#box.addEventListener('mousemove', this.handle_mousemove.bind(this));
 
         this.#canvas.get_base().appendChild(this.#box);
         this.#canvas.add_group(this);
@@ -150,6 +148,8 @@ class TextBox {
     #x = 0;
     #y = 0;
 
+    #prev_text = "";
+
     on_move;
     on_focus;
     on_blur;
@@ -214,6 +214,10 @@ class TextBox {
         return this.#inner.innerText;
     }
 
+    get_prev_text() {
+        return this.#prev_text;
+    }
+
     get_position() {
         return [this.#x, this.#y];
     }
@@ -245,6 +249,7 @@ class TextBox {
 
     edit_text() {
         this.#box.classList.add('textbox');
+        this.#prev_text = this.get_text();
         this.on_focus?.();
     }
 
@@ -279,6 +284,7 @@ class TextBox {
 export class Canvas {
 
     #content;
+    #history;
 
     #text_objects = {};
     #group_objects = {};
@@ -293,11 +299,11 @@ export class Canvas {
     #scale = 1;
 
     #preview_group;
-    #current_group = null;
     #is_dragging = false;
 
-    constructor(content, width, height) {
+    constructor(content, history, width, height) {
         this.#content = content;
+        this.#history = history;
         this.#base = document.createElement('div');
 
         this.#width = width;
@@ -316,7 +322,6 @@ export class Canvas {
         this.#base.addEventListener('click', this.handle_click.bind(this));
         this.#base.addEventListener('wheel', this.zoom.bind(this));
         this.#base.addEventListener('mousedown', this.start_pan.bind(this));
-        this.#base.addEventListener('mousemove', this.handle_mousemove.bind(this));
 
         this.#preview_group = new TextGroup(this, true);
         this.#preview_group.get_box().classList.add('preview-group');
@@ -328,10 +333,6 @@ export class Canvas {
 
     get_scale() {
         return this.#scale;
-    }
-
-    set_current_group(group) {
-        this.#current_group = group;
     }
 
     set_viewport(width, height) {
@@ -418,24 +419,6 @@ export class Canvas {
         this.#base.addEventListener('mouseup', stop);
     }
 
-    handle_mousemove(e) {
-        let group = null;
-        const [x, y] = this.viewport_to_world(e.clientX, e.clientY);
-        for (const id of Object.keys(this.#group_objects)) {
-            if (id === this.#preview_group.get_id()) {
-                continue;
-            }
-            const g = this.#group_objects[id];
-            const [g_x, g_y, g_width, g_height] = g.get_size();
-            if (x >= g_x && x <= g_x + g_width && y >= g_y && y <= g_y + g_height) {
-                group = g;
-            }
-        }
-        if (group !== this.#current_group) {
-            this.set_current_group(group);
-        }
-    }
-
     handle_click(e) {
         if (this.#is_dragging) {
             this.#is_dragging = false;
@@ -445,6 +428,22 @@ export class Canvas {
             const [x, y] = this.viewport_to_world(e.clientX, e.clientY);
             this.create_textbox(x, y);
         }
+    }
+
+    find_overlapping_group(textbox) {
+        const [x, y] = textbox.get_position();
+        const [width, height] = textbox.get_size();
+        for (const id of Object.keys(this.#group_objects)) {
+            if (id === this.#preview_group.get_id()) {
+                continue;
+            }
+            const g = this.#group_objects[id];
+            const [g_x, g_y, g_width, g_height] = g.get_size();
+            if (intersects([x - PADDING, y - PADDING, width + 2 * PADDING, height + 2 * PADDING], [g_x, g_y, g_width, g_height])) {
+                return g;
+            }
+        }
+        return null;
     }
 
     remove_textbox(id) {
@@ -468,17 +467,14 @@ export class Canvas {
         this.#content.add_text(id, textbox.get_group().get_id(), x, y, textbox.get_text());
     }
 
-    recreate_preview_group(textbox) {
+    recreate_preview_group(group, textbox) {
         this.empty_preview_group();
-        if (this.#current_group === null) {
-            this.#preview_group.add_textbox(textbox);
-        }
-        else {
-            for (const [id, t] of Object.entries(this.#current_group.get_textboxes())) {
+        if (group !== null) {
+            for (const [id, t] of Object.entries(group.get_textboxes())) {
                 this.#preview_group.add_textbox(t);
             }
-            this.#preview_group.add_textbox(textbox);
         }
+        this.#preview_group.add_textbox(textbox);
     }
 
     empty_preview_group() {
@@ -504,10 +500,23 @@ export class Canvas {
         textbox.on_blur = () => {
             if (textbox.get_text() === "" || textbox.get_text() === "\n") {
                 textbox.delete();
+                const prev_text = textbox.get_prev_text();
+                if (prev_text !== "" && prev_text !== "\n") {
+                    this.#history.add_action(new Delete(textbox, prev_text));
+                }
                 this.#is_dragging = false;
             }
             else {
                 this.#content.set_text(textbox.get_id(), textbox.get_text());
+                if (this.#history.is_tracking(textbox.get_id())) {
+                    if (textbox.get_prev_text() !== textbox.get_text()) {
+                        this.#history.add_action(new Edit(textbox, textbox.get_prev_text(), textbox.get_text()));
+                    }
+                }
+                else {
+                    this.#history.add_action(new Create(textbox, textbox.get_text()));
+                }
+
             }
         };
 
@@ -519,9 +528,16 @@ export class Canvas {
             e.preventDefault();
             let last_x = e.clientX;
             let last_y = e.clientY;
+            const [start_x, start_y] = textbox.get_position();
+
+            const prev_group = textbox.get_group();
             textbox.set_group(null);
-            let last_preview_group = this.#current_group;
-            this.recreate_preview_group(textbox);
+            let last_preview_group = null;
+            if (prev_group.get_count() > 0) {
+                last_preview_group = prev_group;
+            }
+            this.recreate_preview_group(last_preview_group, textbox);
+
             document.body.style.cursor = 'grabbing';
 
             this.#is_dragging = true;
@@ -533,9 +549,10 @@ export class Canvas {
                 textbox.move_by(dx, dy);
                 last_x = e.clientX;
                 last_y = e.clientY;
-                if (this.#current_group !== last_preview_group) {
-                    this.recreate_preview_group(textbox);
-                    last_preview_group = this.#current_group;
+                const overlapping_group = this.find_overlapping_group(textbox);
+                if (overlapping_group !== last_preview_group) {
+                    this.recreate_preview_group(overlapping_group, textbox);
+                    last_preview_group = overlapping_group;
                 } else {
                     this.#preview_group.update_size();
                 }
@@ -545,7 +562,7 @@ export class Canvas {
                 base.removeEventListener('mousemove', drag);
                 base.removeEventListener('mouseleave', stop);
                 base.removeEventListener('mouseup', stop);
-                textbox.set_group(this.#current_group);
+                textbox.set_group(last_preview_group);
                 this.empty_preview_group();
                 if (textbox.get_group() === null) {
                     const new_group = new TextGroup(this);
@@ -554,6 +571,7 @@ export class Canvas {
                 textbox.focus();
                 const [x, y] = textbox.get_position();
                 this.#content.move_text(textbox.get_id(), x, y, textbox.get_group().get_id());
+                this.#history.add_action(new Move(textbox, textbox.get_text(), start_x, start_y, prev_group, textbox.get_group()));
                 e.stopPropagation();
                 document.body.style.cursor = 'default';
             }

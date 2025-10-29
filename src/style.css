@@ -11,10 +11,35 @@ body {
     margin: 0;
 }
 
+.container {
+    display: flex;
+    height: 100%;
+}
+
 .base-container {
-    width: 100%;
+    width: 75%;
     height: 100%;
     overflow: hidden;
+}
+
+.sidebar-container {
+    width: 25%;
+    height: 100%;
+    background: lightblue;
+}
+
+.history {
+    margin: 0;
+    padding: 0 1em;
+    height: 100%;
+    overflow-y: scroll;
+}
+
+.action {
+    font-family: sans-serif;
+    padding: 1em;
+    border-bottom: 1px solid #aaa;
+    list-style: none;
 }
 
 .base {
@@ -54,3 +79,4 @@ body {
     background: #bbb;
     z-index: -1;
 }
+
