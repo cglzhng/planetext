@@ -31,3 +31,4 @@ function startup() {
     history_box.classList.add('history');
     sidebar.appendChild(history_box);
 }
+

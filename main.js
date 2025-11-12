@@ -1,4 +1,5 @@
 const { app, BrowserWindow } = require('electron')
+import { make_menu } from './menu.js';
 
 const createWindow = () => {
   const win = new BrowserWindow({
@@ -13,7 +14,10 @@ app.whenReady().then(() => {
   createWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+      make_menu();
+    }
   })
 })
 

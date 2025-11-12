@@ -75,6 +75,10 @@ body {
     z-index: -2;
 }
 
+.group::before {
+    content: var(--group-id, "");
+}
+
 .preview-group {
     background: #bbb;
     z-index: -1;
