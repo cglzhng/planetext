@@ -1,5 +1,6 @@
 import { generate_id, intersects } from './utils.js';
-import { History, Move, Create, Edit, Delete, CreateGroup, DeleteGroup } from './history.js';
+import { TextGroup } from './canvas-textgroup.js';
+import { TextBox } from './canvas-textbox.js';
 
 const ZOOM_SPEED = 1.1;
 const MIN_ZOOM = 0.1;
@@ -7,294 +8,13 @@ const MAX_ZOOM = 10;
 
 const PADDING = 50;
 
-export class TextGroup {
-    #id;
-    #canvas;
-    #can_be_empty = false;
-
-    #box;
-    #x = 0;
-    #y = 0;
-    #width = 0;
-    #height = 0;
-
-    #count = 0;
-
-    #textboxes = {};
-
-    constructor(canvas, { id = null, can_be_empty = false }={}) {
-        this.#canvas = canvas;
-        if (id === null) {
-            this.#id = generate_id();
-        } else {
-            this.#id = id;
-        }
-        this.#can_be_empty = can_be_empty;
-
-        this.#box = document.createElement('div');
-        this.#box.classList.add('group');
-        this.#box.style.position = 'absolute';
-        this.#box.style.setProperty('--group-id', `"${this.#id}"`);
-
-        this.#box.addEventListener('click', this.handle_click.bind(this));
-
-        this.#canvas.get_base().appendChild(this.#box);
-        this.#canvas.add_group(this);
-    }
-
-    get_id() {
-        return this.#id;
-    }
-
-    get_box() {
-        return this.#box;
-    }
-
-    get_count() {
-        return this.#count;
-    }
-
-    get_size() {
-        return [this.#x, this.#y, this.#width, this.#height];
-    }
-
-    add_textbox(textbox) {
-        const id = textbox.get_id();
-        this.#textboxes[id] = textbox;
-        ++this.#count;
-        this.update_size();
-    }
-
-    remove_textbox(id) {
-        delete this.#textboxes[id];
-        --this.#count;
-        if (this.#count === 0 && !this.#can_be_empty) {
-            //            this.delete();
-        } else {
-            this.update_size();
-        }
-    }
-
-    get_textboxes() {
-        return this.#textboxes;
-    }
-
-    display() {
-        this.#box.style.transform = `translate(${this.#x}px, ${this.#y}px)`;
-        this.#box.style.width = `${this.#width}px`;
-        this.#box.style.height = `${this.#height}px`;
-    }
-
-    update_size() {
-        if (this.#count === 0) {
-            this.#x = 0;
-            this.#y = 0;
-            this.#width = 0;
-            this.#height = 0;
-            this.display();
-            return;
-        }
-
-        let min_x = Infinity;
-        let min_y = Infinity;
-        let max_x = -Infinity;
-        let max_y = -Infinity;
-
-        for (const id of Object.keys(this.#textboxes)) {
-            const textbox = this.#textboxes[id];
-            const [x, y] = textbox.get_position();
-            const [width, height] = textbox.get_size();
-            if (x < min_x) {
-                min_x = x;
-            }
-            if (y < min_y) {
-                min_y = y;
-            }
-            if (x + width > max_x) {
-                max_x = x + width;
-            }
-            if (y + height > max_y) {
-                max_y = y + height;
-            }
-        }
-
-        this.#x = min_x - PADDING;
-        this.#y = min_y - PADDING;
-        this.#width = max_x - min_x + 2 * PADDING;
-        this.#height = max_y - min_y + 2 * PADDING;
-
-        this.display();
-    }
-
-    handle_click(e) {
-        const [x, y] = this.#canvas.viewport_to_world(e.clientX, e.clientY);
-        this.#canvas.create_textbox(x, y, this);
-    }
-
-    delete() {
-        if (this.#count > 0) {
-            for (const id of Object.keys(this.#textboxes)) {
-                this.#textboxes[id].delete();
-            }
-        }
-        this.#box.remove();
-        this.#canvas.remove_group(this.#id);
-    }
-}
-
-class TextBox {
-    #id;
-
-    #group = null;
-    #canvas;
-
-    #inner;
-    #box;
-    #x = 0;
-    #y = 0;
-
-    #prev_text = "";
-
-    on_move;
-    on_focus;
-    on_blur;
-    on_change;
-    on_drag_start;
-
-    constructor(canvas, x, y, group) {
-        this.#canvas = canvas;
-        this.#id = generate_id();
-
-        this.#inner = document.createElement('div');
-        this.#inner.classList.add('text');
-        this.#inner.contentEditable = 'plaintext-only';
-
-        this.#box = document.createElement('div');
-        this.#box.style.position = 'absolute';
-
-        this.#box.appendChild(this.#inner);
-
-        this.move(x, y);
-
-        this.#box.focus();
-
-        this.#inner.addEventListener('blur', this.set_text.bind(this));
-        this.#inner.addEventListener('focus', this.edit_text.bind(this));
-        this.#inner.addEventListener('input', this.input_text.bind(this));
-
-        this.#box.addEventListener('mousedown', this.start_drag.bind(this));
-        this.#inner.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-
-        this.#canvas.get_base().appendChild(this.#box);
-        this.set_group(group);
-        this.#canvas.add_textbox(this);
-    }
-
-    get_id() {
-        return this.#id;
-    }
-
-    set_group(group) {
-        if (group === this.#group) {
-            return;
-        }
-        if (this.#group !== null) {
-            this.#group.remove_textbox(this.#id);
-        }
-        if (group !== null) {
-            group.add_textbox(this);
-        }
-        this.#group = group;
-    }
-
-    get_group() {
-        return this.#group;
-    }
-
-    get_box() {
-        return this.#box;
-    }
-
-    get_text() {
-        return this.#inner.innerText;
-    }
-
-    get_prev_text() {
-        return this.#prev_text;
-    }
-
-    get_position() {
-        return [this.#x, this.#y];
-    }
-
-    get_size() {
-        const scale = this.#canvas.get_scale();
-        const rect = this.#box.getBoundingClientRect();
-        return [rect.width / scale, rect.height / scale];
-    }
-
-    focus() {
-        this.#inner.focus();
-        this.on_focus?.();
-    }
-
-    move(x, y) {
-        this.#x = x;
-        this.#y = y;
-        this.#box.style.transform = `translate(${x}px, ${y}px)`;
-        if (this.#group) {
-            this.#group.update_size();
-        }
-        this.on_move?.(x, y);
-    }
-
-    move_by(dx, dy) {
-        this.move(this.#x + dx, this.#y + dy);
-    }
-
-    edit_text() {
-        this.#box.classList.add('textbox');
-        this.#prev_text = this.get_text();
-        this.on_focus?.();
-    }
-
-    input_text() {
-        if (this.#group) {
-            this.#group.update_size();
-        }
-        this.on_change?.(this.get_text());
-    }
-
-    set_text() {
-        this.#box.classList.remove('textbox');
-        this.on_blur?.();
-    }
-
-    start_drag(e) {
-        if (e.button !== 0) {
-            return;
-        }
-        e.stopPropagation();
-        this.on_drag_start?.(e);
-    }
-
-    delete() {
-        this.#box.remove();
-        if (this.#group) {
-            this.#group.remove_textbox(this.#id);
-        }
-        this.#canvas.remove_textbox(this.#id);
-    }
-}
-
-
 export class Canvas {
 
     #content;
     #history;
 
-    #text_objects = {};
-    #group_objects = {};
+    #textboxes = {};
+    #textgroups = {};
 
     #base;
     #width;
@@ -304,6 +24,8 @@ export class Canvas {
     #viewport_x = 0;
     #viewport_y = 0;
     #scale = 1;
+
+    #padding = PADDING;
 
     #preview_group;
     #is_dragging = false;
@@ -329,14 +51,13 @@ export class Canvas {
         this.#base.addEventListener('click', this.handle_click.bind(this));
         this.#base.addEventListener('wheel', this.zoom.bind(this));
         this.#base.addEventListener('mousedown', this.start_pan.bind(this));
-        document.addEventListener('keyup', this.handle_keyup.bind(this));
 
         this.#preview_group = new TextGroup(this, true);
         this.#preview_group.get_box().classList.add('preview-group');
     }
 
     debug() {
-        for (const textbox of Object.values(this.#text_objects)) {
+        for (const textbox of Object.values(this.#textboxes)) {
             console.log(textbox.get_position());
         }
     }
@@ -360,8 +81,18 @@ export class Canvas {
         this.move_viewport(x, y);
     }
 
-    move_textbox(textbox, x, y) {
+    #get_textbox(id) {
+        return this.#textboxes[id] ?? null;
+    }
+
+    #get_group(id) {
+        return this.#textgroups[id] ?? null;
+    }
+
+    move_textbox(id, x, y, group_id) {
+        const textbox = this.#get_textbox(id);
         textbox.move(x, y);
+        this.move_textbox_to_group(id, group_id);
     }
 
     move_viewport(x, y) {
@@ -384,6 +115,10 @@ export class Canvas {
     viewport_to_world(x, y) {
         const rect = this.#base.getBoundingClientRect();
         return [(x - rect.left) / this.#scale, (y - rect.top) / this.#scale];
+    }
+
+    get_padding() {
+        return this.#padding;
     }
 
     zoom(e) {
@@ -448,55 +183,96 @@ export class Canvas {
         }
     }
 
-    handle_keyup(e) {
-        if (e.ctrlKey) {
-            if (e.key === "u") {
-                this.#history.undo(this);
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        }
-    }
-
     find_overlapping_group(textbox) {
         const [x, y] = textbox.get_position();
         const [width, height] = textbox.get_size();
-        for (const id of Object.keys(this.#group_objects)) {
-            if (id === this.#preview_group.get_id()) {
+        for (const gid of Object.keys(this.#textgroups)) {
+            if (gid === this.#preview_group.get_id()) {
                 continue;
             }
-            const g = this.#group_objects[id];
+            const g = this.#get_group(gid);
             const [g_x, g_y, g_width, g_height] = g.get_size();
-            if (intersects([x - PADDING, y - PADDING, width + 2 * PADDING, height + 2 * PADDING], [g_x, g_y, g_width, g_height])) {
+            if (intersects(
+                [x - this.#padding, y - this.#padding, width + 2 * this.#padding, height + 2 * this.#padding],
+                [g_x, g_y, g_width, g_height]
+            )) {
                 return g;
             }
         }
         return null;
     }
 
+    set_textbox_text(id, text) {
+        this.#get_textbox(id).set_text(text);
+    }
+
+    move_textbox_to_group(id, g_id) {
+        const textbox = this.#get_textbox(id);
+        const prev_gid = textbox.get_group_id();
+        if (prev_gid === g_id) {
+            if (g_id !== null) {
+                const group = this.#get_group(g_id);
+                group.update_size();
+            }
+            return;
+        }
+        if (prev_gid !== null) {
+            const prev_group = this.#get_group(prev_gid);
+            prev_group.remove_textbox(id);
+        }
+        if (g_id === null) {
+            textbox.set_group_id(null);
+            return;
+        }
+        const group = this.#get_group(g_id);
+        textbox.set_group_id(g_id);
+        group.add_textbox(textbox);
+    }
+
     remove_textbox(id) {
-        delete this.#text_objects[id];
+        const textbox = this.#get_textbox(id);
+        delete this.#textboxes[id];
+
+        const group = this.#get_group(textbox.get_group_id());
+        if (group) {
+            group.remove_textbox(id);
+            group.update_size();
+        }
+
+        // Must be called at the end so that blur is the last thing that happens
+        textbox.delete();
+    }
+
+    remove_textbox_update(id) {
+        this.remove_textbox(id);
         this.#content.remove_text(id);
     }
 
     get_group(id) {
-        return this.#group_objects[id];
+        return this.#textgroups[id];
     }
 
     remove_group(id) {
-        delete this.#group_objects[id];
+        this.#get_group(id).delete();
+        delete this.#textgroups[id];
     }
 
-    add_group(group) {
+    create_group() {
+        const group = new TextGroup(this);
         const id = group.get_id();
-        this.#group_objects[id] = group;
+        this.#textgroups[id] = group;
+        return group;
     }
 
     add_textbox(textbox) {
         const id = textbox.get_id();
-        this.#text_objects[id] = textbox;
+        this.#textboxes[id] = textbox;
+    }
+
+    add_textbox_update(textbox) {
+        this.add_textbox(textbox);
         const [x, y] = textbox.get_position();
-        this.#content.add_text(id, textbox.get_group()?.get_id(), x, y, textbox.get_text());
+        this.#content.add_text(id, textbox.get_group_id(), x, y, textbox.get_text());
     }
 
     recreate_preview_group(group, textbox) {
@@ -510,131 +286,144 @@ export class Canvas {
     }
 
     empty_preview_group() {
-        for (const id of Object.keys(this.#preview_group.get_textboxes())) {
-            this.#preview_group.remove_textbox(id);
-        }
-        this.#preview_group.update_size();
+        this.#preview_group.clear();
     }
 
-    create_textbox(x, y, group = null) {
+    create_textbox(x, y, g_id = null) {
+        if (g_id === null) {
+            const group = this.create_group();
+            g_id = group.get_id()
+        }
+        const textbox = new TextBox(this, x, y);
+        const id = textbox.get_id();
 
-        const textbox = new TextBox(this, x, y, group);
+        this.move_textbox_to_group(id, g_id);
 
-        textbox.on_move = (new_x, new_y) => {
-        };
+        textbox.on_move = () => { };
 
-        textbox.on_focus = () => {
-            this.#is_dragging = true;
+        textbox.on_focus = this.handle_textbox_focus.bind(this);
+        textbox.on_blur = this.handle_textbox_blur.bind(this, id);
+        textbox.on_change = this.handle_textbox_change.bind(this, id);
+        textbox.on_drag_start = this.handle_textbox_mousedown.bind(this, id);
+
+        this.#content.add_text_update(id, g_id, x, y);
+        textbox.focus();
+    }
+
+    handle_textbox_focus() {
+        this.#is_dragging = true;
+    }
+
+    handle_textbox_blur(id) {
+        const textbox = this.#get_textbox(id);
+
+        // Blur occurs when a textbox is deleted, so check for that
+        if (textbox === null) {
+            return;
         }
 
-        textbox.on_blur = () => {
-            if (textbox.get_text() === "" || textbox.get_text() === "\n") {
-                textbox.delete();
-                if (textbox.get_group()?.get_count() === 0) {
-                    textbox.get_group().delete();
-                }
-                const prev_text = textbox.get_prev_text();
-                if (prev_text !== "" && prev_text !== "\n") {
-                    this.#history.add_action(new Delete(textbox, prev_text));
-                }
-                this.#is_dragging = false;
+        const g_id = textbox.get_group_id();
+        const group = g_id && this.#get_group(g_id);
+        if (textbox.is_empty()) {
+            this.remove_textbox(id);
+            group?.remove_textbox(id);
+            this.#is_dragging = false;
+        } else {
+            this.#history.start_action_group();
+            this.#content.set_text(id, textbox.get_text());
+            this.#history.end_action_group();
+        }
+    }
+
+    handle_textbox_change(id) {
+        const textbox = this.#get_textbox(id);
+        this.#content.set_text(id, textbox.get_text(), false);
+        if (textbox.get_group_id() === null) {
+            const group = this.create_group();
+            this.move_textbox_to_group(textbox.get_id(), group.get_id());
+        }
+        this.#get_group(textbox.get_group_id()).update_size();
+    }
+
+    handle_textbox_mousedown(id, e) {
+        e.preventDefault();
+        const textbox = this.#get_textbox(id);
+        if (textbox.is_empty()) {
+            return;
+        }
+
+        let last_x = e.clientX;
+        let last_y = e.clientY;
+
+        const prev_gid = textbox.get_group_id();
+        const prev_group = prev_gid && this.#get_group(prev_gid);
+        this.move_textbox_to_group(id, null);
+        let last_preview_group = null;
+        if (prev_group?.get_count() > 0) {
+            last_preview_group = prev_group;
+        }
+        this.recreate_preview_group(last_preview_group, textbox);
+
+        document.body.style.cursor = 'grabbing';
+
+        this.#is_dragging = true;
+
+        const drag = (e) => {
+            e.preventDefault();
+
+            this.#history.start_action_group();
+            this.#content.set_text(id, textbox.get_text());
+            this.#history.end_action_group();
+
+            const dx = (e.clientX - last_x) / this.#scale;
+            const dy = (e.clientY - last_y) / this.#scale;
+            textbox.move_by(dx, dy);
+            last_x = e.clientX;
+            last_y = e.clientY;
+            const overlapping_group = this.find_overlapping_group(textbox);
+            if (overlapping_group !== last_preview_group) {
+                this.recreate_preview_group(overlapping_group, textbox);
+                last_preview_group = overlapping_group;
+            } else {
+                this.#preview_group.update_size();
             }
-            else {
-                this.#content.set_text(textbox.get_id(), textbox.get_text());
-                if (this.#history.is_tracking(textbox.get_id())) {
-                    if (textbox.get_prev_text() !== textbox.get_text()) {
-                        this.#history.add_action(new Edit(textbox, textbox.get_prev_text(), textbox.get_text()));
-                    }
+        }
+
+        const stop = (e) => {
+            base.removeEventListener('mousemove', drag);
+            base.removeEventListener('mouseleave', stop);
+            base.removeEventListener('mouseup', stop);
+
+            this.#history.start_action_group();
+
+            this.empty_preview_group();
+            if (last_preview_group === null) {
+                if (prev_group?.get_count() === 0) {
+                    this.move_textbox_to_group(id, prev_gid);
                 }
                 else {
-                    this.#history.start_action_group();
-                    this.#history.add_action(new Create(textbox, textbox.get_text()));
-                }
-            }
-        };
+                    const new_group = this.create_group();
+                    this.move_textbox_to_group(id, new_group.get_id());
 
-        textbox.on_change = () => {
-            this.#content.set_text(textbox.get_id(), textbox.get_text());
-            if (textbox.get_group() === null) {
-                group = new TextGroup(this);
-                textbox.set_group(group);
+                }
+            } else {
+                this.move_textbox_to_group(id, last_preview_group.get_id());
             }
+
+            textbox.focus();
+            const [x, y] = textbox.get_position();
+            this.#content.move_text(textbox.get_id(), x, y, textbox.get_group_id());
+
+            this.#history.end_action_group();
+            e.stopPropagation();
+            document.body.style.cursor = 'default';
         }
 
-        textbox.on_drag_start = (e) => {
-            e.preventDefault();
-            let last_x = e.clientX;
-            let last_y = e.clientY;
-            const [start_x, start_y] = textbox.get_position();
-
-            const prev_group = textbox.get_group();
-            textbox.set_group(null);
-            let last_preview_group = null;
-            if (prev_group.get_count() > 0) {
-                last_preview_group = prev_group;
-            }
-            this.recreate_preview_group(last_preview_group, textbox);
-
-            document.body.style.cursor = 'grabbing';
-
-            this.#is_dragging = true;
-
-            const drag = (e) => {
-                e.preventDefault();
-                const dx = (e.clientX - last_x) / this.#scale;
-                const dy = (e.clientY - last_y) / this.#scale;
-                textbox.move_by(dx, dy);
-                last_x = e.clientX;
-                last_y = e.clientY;
-                const overlapping_group = this.find_overlapping_group(textbox);
-                if (overlapping_group !== last_preview_group) {
-                    this.recreate_preview_group(overlapping_group, textbox);
-                    last_preview_group = overlapping_group;
-                } else {
-                    this.#preview_group.update_size();
-                }
-            }
-
-            const stop = (e) => {
-                base.removeEventListener('mousemove', drag);
-                base.removeEventListener('mouseleave', stop);
-                base.removeEventListener('mouseup', stop);
-
-                this.#history.start_action_group();
-
-                textbox.set_group(last_preview_group);
-                this.empty_preview_group();
-                if (textbox.get_group() === null && prev_group.get_count() === 0) {
-                    textbox.set_group(prev_group);
-                }
-                if (textbox.get_group() === null) {
-                    const new_group = new TextGroup(this);
-                    this.#history.add_action(new CreateGroup(new_group));
-                    textbox.set_group(new_group);
-                }
-
-                textbox.focus();
-                const [x, y] = textbox.get_position();
-                this.#content.move_text(textbox.get_id(), x, y, textbox.get_group().get_id());
-                this.#history.add_action(new Move(textbox, textbox.get_text(), {x: start_x, y: start_y}, {x, y}, prev_group.get_id(), textbox.get_group().get_id()));
-
-                if (prev_group.get_count() === 0) {
-                    prev_group.delete();
-                    this.#history.add_action(new DeleteGroup(prev_group.get_id()));
-                }
-                this.#history.end_action_group();
-                e.stopPropagation();
-                document.body.style.cursor = 'default';
-            }
-
-            base.addEventListener('mousemove', drag);
-            base.addEventListener('mouseleave', stop);
-            base.addEventListener('mouseup', stop);
-        }
-
-        textbox.focus();
-
+        base.addEventListener('mousemove', drag);
+        base.addEventListener('mouseleave', stop);
+        base.addEventListener('mouseup', stop);
     }
+
 
 
 }

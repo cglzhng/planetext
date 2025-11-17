@@ -16,6 +16,9 @@ const canvas = new Canvas(content, history, CANVAS_WIDTH, CANVAS_HEIGHT);
 window.addEventListener("load", startup);
 
 function startup() {
+    content.set_canvas(canvas);
+    content.set_history(history);
+
     container = document.getElementById('base-container');
     sidebar = document.getElementById('sidebar-container');
 
@@ -30,5 +33,17 @@ function startup() {
     const history_box = history.get_box();
     history_box.classList.add('history');
     sidebar.appendChild(history_box);
+
+    document.addEventListener("keyup", keybinds);
+}
+
+function keybinds(e) {
+    if (e.ctrlKey) {
+        if (e.key === "u") {
+            history.undo(content);
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }
 }
 

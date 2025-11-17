@@ -1,18 +1,24 @@
-import { TextGroup } from './canvas.js';
+import { TextGroup } from './canvas-textgroup.js';
 
 class ActionGroup {
     #actions = [];
 
     constructor() { }
 
+    get_length() {
+        return this.#actions.length;
+    }
+
     add_action(action) {
         this.#actions.push(action);
     }
 
-    undo(canvas) {
+    undo(content) {
+        console.log("start undo");
+        console.log(this.#actions);
         for (const action of this.#actions.toReversed()) {
             console.log("undoing");
-            action.undo(canvas);
+            action.undo(content);
         }
     }
 
@@ -66,15 +72,15 @@ export class Delete extends Action {
 }
 
 export class Move extends Action {
-    #textbox;
+    #id;
     #text;
     #old_pos;
     #new_pos;
     #old_group_id;
     #new_group_id;
-    constructor(textbox, text, old_pos, new_pos, old_group_id, new_group_id) {
+    constructor(id, text, old_pos, new_pos, old_group_id, new_group_id) {
         super();
-        this.#textbox = textbox;
+        this.#id = id;
         this.#text = text;
         this.#old_pos = old_pos;
         this.#new_pos = new_pos;
@@ -83,7 +89,7 @@ export class Move extends Action {
     }
 
     get_tracking_id() {
-        return this.#textbox.get_id();
+        return this.#id;
     }
 
     get_description() {
@@ -93,12 +99,8 @@ export class Move extends Action {
         return `Moved ${this.#text} in group ${this.#new_group_id}`;
     }
 
-    undo(canvas) {
-        this.#textbox.move(this.#old_pos.x, this.#old_pos.y);
-        if (this.#old_group_id !== this.#new_group_id) {
-            this.#textbox.set_group(canvas.get_group(this.#old_group_id));
-        }
-        canvas.debug();
+    undo(content) {
+        content.move_text_update(this.#id, this.#old_pos.x, this.#old_pos.y, this.#old_group_id);
     }
 }
 
@@ -146,50 +148,51 @@ export class DeleteGroup extends Action {
 }
 
 export class Create extends Action {
-    #textbox;
+    #id;
     #text;
-    constructor(textbox, text) {
+    constructor(id, text) {
         super();
-        this.#textbox = textbox;
+        this.#id = id;
         this.#text = text;
     }
 
     get_tracking_id() {
-        return this.#textbox.get_id();
+        return this.#id;
     }
 
     get_description() {
         return `Created ${this.#text}`;
     }
 
-    undo() {
-
+    undo(content) {
+        content.remove_text_update(this.#id);
     }
 }
 
 export class Edit extends Action {
-    #textbox;
+    #id;
     #old_text;
     #new_text;
     #diff;
-    constructor(textbox, old_text, new_text, diff) {
+    constructor(id, old_text, new_text, diff) {
         super();
-        this.#textbox = textbox;
+        this.#id = id;
         this.#old_text = old_text;
         this.#new_text = new_text;
         this.#diff = diff;
     }
 
     get_tracking_id() {
-        return this.#textbox.get_id();
+        return this.#id;
     }
 
     get_description() {
         return `Replaced ${this.#old_text} with ${this.#new_text}`;
     }
 
-    undo() {
-
+    undo(content) {
+        console.log("undoing edit");
+        content.set_text_update(this.#id, this.#old_text);
     }
 }
 
@@ -218,6 +221,10 @@ export class History {
     }
 
     end_action_group() {
+        if (this.#action_groups[this.#action_groups.length - 1].get_length() === 0) {
+            this.#action_groups.pop();
+            return;
+        }
         const node = this.#action_groups[this.#action_groups.length - 1].render();
         if (this.#box.firstChild) {
             this.#box.insertBefore(node, this.#box.firstChild);
@@ -235,12 +242,12 @@ export class History {
     render_last_action() {
     }
 
-    undo(canvas) {
+    undo(content) {
         if (this.#action_groups.length === 0) {
             return;
         }
         const action = this.#action_groups.pop();
-        action.undo(canvas);
+        action.undo(content);
         this.#box.firstChild.remove();
     }
 }
