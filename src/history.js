@@ -49,25 +49,30 @@ class Action {
 }
 
 export class Delete extends Action {
-    #textbox;
+    #id;
     #text;
+    #pos;
+    #g_id;
 
-    constructor(textbox, text) {
+    constructor(id, text, pos, g_id) {
         super();
-        this.#textbox = textbox;
+        this.#id = id;
         this.#text = text;
+        this.#pos = pos;
+        this.#g_id = g_id;
     }
 
     get_tracking_id() {
-        return this.#textbox.get_id();
+        return this.#id;
     }
 
     get_description() {
         return `Deleted ${this.#text}`;
     }
 
-    undo() {
-
+    undo(content) {
+        content.add_text_update(this.#id, this.#g_id, this.#pos);
+        content.set_text_update(this.#id, this.#text);
     }
 }
 
@@ -100,7 +105,7 @@ export class Move extends Action {
     }
 
     undo(content) {
-        content.move_text_update(this.#id, this.#old_pos.x, this.#old_pos.y, this.#old_group_id);
+        content.move_text_update(this.#id, this.#old_pos, this.#old_group_id);
     }
 }
 
@@ -142,7 +147,6 @@ export class DeleteGroup extends Action {
     }
 
     undo(canvas) {
-        console.log("creating group " + this.#id);
         new TextGroup(canvas, { id: this.#id });
     }
 }
@@ -191,7 +195,6 @@ export class Edit extends Action {
     }
 
     undo(content) {
-        console.log("undoing edit");
         content.set_text_update(this.#id, this.#old_text);
     }
 }

@@ -173,13 +173,13 @@ export class Canvas {
     }
 
     handle_click(e) {
-        if (this.#is_dragging) {
-            this.#is_dragging = false;
-            return;
-        }
         if (e.target === this.#base) {
+            if (this.#is_dragging) {
+                this.#is_dragging = false;
+                return;
+            }
             const [x, y] = this.viewport_to_world(e.clientX, e.clientY);
-            this.create_textbox(x, y);
+            this.create_textbox_from_click(x, y);
         }
     }
 
@@ -203,7 +203,15 @@ export class Canvas {
     }
 
     set_textbox_text(id, text) {
-        this.#get_textbox(id).set_text(text);
+        const textbox = this.#get_textbox(id);
+        textbox.set_text(text);
+        const group = this.#get_group(textbox.get_group_id());
+        group?.update_size();
+    }
+
+    set_textbox_text_update(id, text) {
+        this.set_textbox_text(id, text);
+        this.#content.set_text(id, text);
     }
 
     move_textbox_to_group(id, g_id) {
@@ -272,7 +280,7 @@ export class Canvas {
     add_textbox_update(textbox) {
         this.add_textbox(textbox);
         const [x, y] = textbox.get_position();
-        this.#content.add_text(id, textbox.get_group_id(), x, y, textbox.get_text());
+        this.#content.add_text(id, textbox.get_group_id(), {x, y}, textbox.get_text());
     }
 
     recreate_preview_group(group, textbox) {
@@ -289,13 +297,13 @@ export class Canvas {
         this.#preview_group.clear();
     }
 
-    create_textbox(x, y, g_id = null) {
+    create_textbox(x, y, g_id = null, id = null) {
         if (g_id === null) {
             const group = this.create_group();
-            g_id = group.get_id()
+            g_id = group.get_id();
         }
-        const textbox = new TextBox(this, x, y);
-        const id = textbox.get_id();
+        const textbox = new TextBox(this, x, y, id);
+        id = textbox.get_id();
 
         this.move_textbox_to_group(id, g_id);
 
@@ -306,42 +314,51 @@ export class Canvas {
         textbox.on_change = this.handle_textbox_change.bind(this, id);
         textbox.on_drag_start = this.handle_textbox_mousedown.bind(this, id);
 
-        this.#content.add_text_update(id, g_id, x, y);
+        return textbox;
+    }
+
+    create_textbox_from_click(x, y, g_id=null) {
+        const textbox = this.create_textbox(x, y, g_id);
+        console.log(textbox);
         textbox.focus();
     }
 
     handle_textbox_focus() {
+        console.log("focused");
         this.#is_dragging = true;
     }
 
     handle_textbox_blur(id) {
         const textbox = this.#get_textbox(id);
 
-        // Blur occurs when a textbox is deleted, so check for that
+        // Blur also occurs when a textbox is deleted, so check for that
         if (textbox === null) {
             return;
         }
 
-        const g_id = textbox.get_group_id();
-        const group = g_id && this.#get_group(g_id);
-        if (textbox.is_empty()) {
+        if (!textbox.is_populated()) {
             this.remove_textbox(id);
-            group?.remove_textbox(id);
             this.#is_dragging = false;
-        } else {
-            this.#history.start_action_group();
-            this.#content.set_text(id, textbox.get_text());
-            this.#history.end_action_group();
+            return;
         }
+
+        this.#history.start_action_group();
+        if (textbox.is_empty()) {
+            this.remove_textbox_update(id);
+        } else {
+            this.set_textbox_text_update(id, textbox.get_text());
+        }
+        this.#history.end_action_group();
     }
 
     handle_textbox_change(id) {
         const textbox = this.#get_textbox(id);
-        this.#content.set_text(id, textbox.get_text(), false);
-        if (textbox.get_group_id() === null) {
-            const group = this.create_group();
-            this.move_textbox_to_group(textbox.get_id(), group.get_id());
+        if (!textbox.is_populated()) {
+            const [x, y] = textbox.get_position();
+            this.#content.add_text(id, textbox.get_group_id(), {x, y});
+            textbox.populate();
         }
+        this.#content.set_text(id, textbox.get_text(), false);
         this.#get_group(textbox.get_group_id()).update_size();
     }
 
@@ -412,7 +429,7 @@ export class Canvas {
 
             textbox.focus();
             const [x, y] = textbox.get_position();
-            this.#content.move_text(textbox.get_id(), x, y, textbox.get_group_id());
+            this.#content.move_text(textbox.get_id(), {x, y}, textbox.get_group_id());
 
             this.#history.end_action_group();
             e.stopPropagation();

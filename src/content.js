@@ -24,25 +24,21 @@ export class Content {
         return this.#text_by_id[id];
     }
 
-    move_text(id, x, y, group_id, record = true) {
+    move_text(id, pos, group_id, record = true) {
         const text = this.#text_by_id[id];
-        const old_pos = {
-            x: text.x,
-            y: text.y,
-        }
+        const old_pos = {x: text.position.x, y: text.position.y };
         const old_group_id = text.group_id;
 
-        text.x = x;
-        text.y = y;
+        text.position = pos;
         text.group_id = group_id;
         if (record) {
-            this.#history.add_action(new Move(id, text.content, old_pos, { x, y }, old_group_id, group_id));
+            this.#history.add_action(new Move(id, text.content, old_pos, pos, old_group_id, group_id));
         }
     }
 
-    move_text_update(id, x, y, group_id) {
-        this.move_text(id, x, y, group_id, false);
-        this.#canvas.move_textbox(id, x, y, group_id);
+    move_text_update(id, pos, group_id) {
+        this.move_text(id, pos, group_id, false);
+        this.#canvas.move_textbox(id, pos.x, pos.y, group_id);
     }
 
     set_text(id, s, record = true) {
@@ -66,29 +62,33 @@ export class Content {
         this.#canvas.set_textbox_text(id, s);
     }
 
-    remove_text(id) {
+    remove_text(id, record = true) {
+        const text = this.#text_by_id[id];
+        if (record) {
+            this.#history.add_action(new Delete(id, text.record, text.position, text.group_id));
+        }
         delete this.#text_by_id[id];
     }
 
     remove_text_update(id) {
-        this.remove_text(id);
+        this.remove_text(id, false);
         this.#canvas.remove_textbox(id);
     }
 
-    add_text(id, group_id, x, y) {
+    add_text(id, group_id, pos) {
         const text = {
             id: id,
             group_id: group_id,
             content: "",
             record: "",
-            x: x,
-            y: y,
+            position: pos,
         };
         this.#text_by_id[id] = text;
     }
 
-    add_text_update(id, group_id, x, y) {
-        this.add_text(id, group_id, x, y);
+    add_text_update(id, group_id, pos) {
+        this.add_text(id, group_id, pos);
+        this.#canvas.create_textbox(pos.x, pos.y, group_id, id);
     }
 
 }

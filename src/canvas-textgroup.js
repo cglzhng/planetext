@@ -130,7 +130,7 @@ export class TextGroup {
 
     handle_click(e) {
         const [x, y] = this.#canvas.viewport_to_world(e.clientX, e.clientY);
-        this.#canvas.create_textbox(x, y, this.#id);
+        this.#canvas.create_textbox_from_click(x, y, this.#id);
     }
 
     delete() {

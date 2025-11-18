@@ -1,7 +1,7 @@
 import { generate_id } from './utils.js';
 
 export class TextBox {
-    #id;
+    #id = null;
 
     #group_id = null;
     #canvas;
@@ -11,15 +11,21 @@ export class TextBox {
     #x = 0;
     #y = 0;
 
+    #populated = false;
+
     on_move;
     on_focus;
     on_blur;
     on_change;
     on_drag_start;
 
-    constructor(canvas, x, y) {
+    constructor(canvas, x, y, id = null) {
         this.#canvas = canvas;
-        this.#id = generate_id();
+        if (id === null) {
+            this.#id = generate_id();
+        } else {
+            this.#id = id;
+        }
 
         this.#inner = document.createElement('div');
         this.#inner.classList.add('text');
@@ -43,6 +49,14 @@ export class TextBox {
 
         this.#canvas.get_base().appendChild(this.#box);
         this.#canvas.add_textbox(this);
+    }
+
+    is_populated() {
+        return this.#populated;
+    }
+
+    populate() {
+        this.#populated = true;
     }
 
     get_id() {
