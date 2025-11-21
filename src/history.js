@@ -2,6 +2,7 @@ import { TextGroup } from './canvas-textgroup.js';
 
 class ActionGroup {
     #actions = [];
+    #tag = null;
 
     constructor() { }
 
@@ -9,8 +10,15 @@ class ActionGroup {
         return this.#actions.length;
     }
 
+    is_move() {
+        return this.#actions[0] instanceof Move;
+    }
+
     add_action(action) {
         this.#actions.push(action);
+        if (action.get_tag()) {
+            this.set_tag(action.get_tag());
+        }
     }
 
     undo(content) {
@@ -22,6 +30,14 @@ class ActionGroup {
         }
     }
 
+    set_tag(tag) {
+        this.#tag = tag;
+    }
+
+    get_tag() {
+        return this.#tag;
+    }
+
     render() {
         const li = document.createElement("li");
 
@@ -29,6 +45,10 @@ class ActionGroup {
         for (const action of this.#actions) {
             s += action.render();
         }
+        if (this.#tag) {
+            s = this.#tag + " " + s;
+        }
+
         const t = document.createTextNode(s);
 
         li.appendChild(t);
@@ -60,6 +80,10 @@ export class Delete extends Action {
         this.#text = text;
         this.#pos = pos;
         this.#g_id = g_id;
+    }
+
+    get_tag() {
+        return this.#g_id;
     }
 
     get_tracking_id() {
@@ -95,6 +119,10 @@ export class Move extends Action {
 
     get_tracking_id() {
         return this.#id;
+    }
+
+    get_tag() {
+        return this.#new_group_id;
     }
 
     get_description() {
@@ -153,11 +181,17 @@ export class DeleteGroup extends Action {
 
 export class Create extends Action {
     #id;
+    #g_id;
     #text;
-    constructor(id, text) {
+    constructor(id, group_id, text) {
         super();
         this.#id = id;
+        this.#g_id = group_id;
         this.#text = text;
+    }
+
+    get_tag() {
+        return this.#g_id;
     }
 
     get_tracking_id() {
@@ -175,15 +209,21 @@ export class Create extends Action {
 
 export class Edit extends Action {
     #id;
+    #g_id;
     #old_text;
     #new_text;
     #diff;
-    constructor(id, old_text, new_text, diff) {
+    constructor(id, group_id, old_text, new_text, diff) {
         super();
         this.#id = id;
+        this.#g_id = group_id;
         this.#old_text = old_text;
         this.#new_text = new_text;
         this.#diff = diff;
+    }
+
+    get_tag() {
+        return this.#g_id;
     }
 
     get_tracking_id() {
@@ -201,8 +241,10 @@ export class Edit extends Action {
 
 
 export class History {
-    #action_groups = [];
+    #actions = [];
     #tracking = {};
+
+    #action_tags = {};
 
     #box;
 
@@ -219,16 +261,24 @@ export class History {
         return this.#tracking[id] === true;
     }
 
+    retag_actions() {
+
+    }
+/*
     start_action_group() {
         this.#action_groups.push(new ActionGroup());
     }
 
     end_action_group() {
-        if (this.#action_groups[this.#action_groups.length - 1].get_length() === 0) {
+        const last_action_group = this.#action_groups[this.#action_groups.length - 1];
+        if (last_action_group.get_length() === 0) {
             this.#action_groups.pop();
             return;
         }
-        const node = this.#action_groups[this.#action_groups.length - 1].render();
+        if (last_action_group.is_move()) {
+            retag_actions();
+        }
+        const node = last_action_group.render();
         if (this.#box.firstChild) {
             this.#box.insertBefore(node, this.#box.firstChild);
         } else {
@@ -236,9 +286,10 @@ export class History {
         }
 
     }
+*/
 
     add_action(action) {
-        this.#action_groups[this.#action_groups.length - 1].add_action(action);
+        this.#actions.push(action);
         this.#tracking[action.get_tracking_id()] = true;
     }
 
@@ -246,10 +297,10 @@ export class History {
     }
 
     undo(content) {
-        if (this.#action_groups.length === 0) {
+        if (this.#actions.length === 0) {
             return;
         }
-        const action = this.#action_groups.pop();
+        const action = this.#actions.pop();
         action.undo(content);
         this.#box.firstChild.remove();
     }

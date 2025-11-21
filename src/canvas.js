@@ -342,13 +342,13 @@ export class Canvas {
             return;
         }
 
-        this.#history.start_action_group();
+        //this.#history.start_action_group();
         if (textbox.is_empty()) {
             this.remove_textbox_update(id);
         } else {
             this.set_textbox_text_update(id, textbox.get_text());
         }
-        this.#history.end_action_group();
+        //this.#history.end_action_group();
     }
 
     handle_textbox_change(id) {
@@ -388,9 +388,9 @@ export class Canvas {
         const drag = (e) => {
             e.preventDefault();
 
-            this.#history.start_action_group();
+            //this.#history.start_action_group();
             this.#content.set_text(id, textbox.get_text());
-            this.#history.end_action_group();
+            //this.#history.end_action_group();
 
             const dx = (e.clientX - last_x) / this.#scale;
             const dy = (e.clientY - last_y) / this.#scale;
@@ -411,7 +411,7 @@ export class Canvas {
             base.removeEventListener('mouseleave', stop);
             base.removeEventListener('mouseup', stop);
 
-            this.#history.start_action_group();
+            //this.#history.start_action_group();
 
             this.empty_preview_group();
             if (last_preview_group === null) {
@@ -431,7 +431,7 @@ export class Canvas {
             const [x, y] = textbox.get_position();
             this.#content.move_text(textbox.get_id(), {x, y}, textbox.get_group_id());
 
-            this.#history.end_action_group();
+            //this.#history.end_action_group();
             e.stopPropagation();
             document.body.style.cursor = 'default';
         }

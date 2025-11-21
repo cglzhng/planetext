@@ -35,6 +35,10 @@ function startup() {
     sidebar.appendChild(history_box);
 
     document.addEventListener("keyup", keybinds);
+
+    window.ipc.on_request_save(() => {
+        window.ipc.save(content.to_JSON());
+    });
 }
 
 function keybinds(e) {

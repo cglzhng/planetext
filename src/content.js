@@ -49,9 +49,9 @@ export class Content {
                 if (text.record === s) {
                     return;
                 }
-                this.#history.add_action(new Edit(id, text.record, s));
+                this.#history.add_action(new Edit(id, text.group_id, text.record, s));
             } else {
-                this.#history.add_action(new Create(id, s));
+                this.#history.add_action(new Create(id, text.group_id, s));
             }
             text.record = s;
         }
@@ -89,6 +89,12 @@ export class Content {
     add_text_update(id, group_id, pos) {
         this.add_text(id, group_id, pos);
         this.#canvas.create_textbox(pos.x, pos.y, group_id, id);
+    }
+
+    to_JSON() {
+        const res = {};
+        res.data = this.#text_by_id;
+        return JSON.stringify(res);
     }
 
 }
