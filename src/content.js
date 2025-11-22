@@ -1,5 +1,5 @@
 import { generate_id } from './utils.js';
-import { History, Move, Create, Edit, Delete, CreateGroup, DeleteGroup } from './history.js';
+import { History, Move, Create, Edit, Delete } from './history.js';
 
 
 export class Content {

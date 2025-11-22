@@ -31,7 +31,6 @@ function startup() {
     canvas.center_viewport();
 
     const history_box = history.get_box();
-    history_box.classList.add('history');
     sidebar.appendChild(history_box);
 
     document.addEventListener("keyup", keybinds);

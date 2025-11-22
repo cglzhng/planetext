@@ -2,6 +2,10 @@
     box-sizing: border-box;
 }
 
+.hidden {
+    display: none;
+}
+
 html {
     height: 100%;
 }
@@ -23,16 +27,43 @@ body {
 }
 
 .sidebar-container {
-    width: 25%;
+    width: 40%;
     height: 100%;
     background: lightblue;
 }
 
 .history {
+    height: 100%;
+    display: flex;
+}
+
+.chrono {
+    width: 50%;
     margin: 0;
     padding: 0 1em;
     height: 100%;
     overflow-y: scroll;
+}
+
+.tags {
+    width: 50%;
+    margin: 0;
+    padding: 0 1em;
+    height: 100%;
+    overflow-y: scroll;
+}
+
+.tag {
+    padding: 2em 0;
+}
+
+.tag h6 {
+    margin: 0;
+    font-size: 1em;
+}
+
+.actions {
+    padding: 0;
 }
 
 .action {

@@ -319,12 +319,10 @@ export class Canvas {
 
     create_textbox_from_click(x, y, g_id=null) {
         const textbox = this.create_textbox(x, y, g_id);
-        console.log(textbox);
         textbox.focus();
     }
 
     handle_textbox_focus() {
-        console.log("focused");
         this.#is_dragging = true;
     }
 
