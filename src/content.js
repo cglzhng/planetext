@@ -51,7 +51,7 @@ export class Content {
                 }
                 this.#history.add_action(new Edit(id, text.group_id, text.record, s));
             } else {
-                this.#history.add_action(new Create(id, text.group_id, s));
+                this.#history.add_action(new Create(id, text.group_id, s, text.position));
             }
             text.record = s;
         }
@@ -59,6 +59,8 @@ export class Content {
 
     set_text_update(id, s) {
         this.set_text(id, s, false);
+        const text = this.#text_by_id[id];
+        text.record = text.content;
         this.#canvas.set_textbox_text(id, s);
     }
 

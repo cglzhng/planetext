@@ -41,12 +41,17 @@ function startup() {
 }
 
 function keybinds(e) {
-    if (e.ctrlKey) {
-        if (e.key === "u") {
-            history.undo(content);
-            e.preventDefault();
-            e.stopPropagation();
-        }
+    if (e.ctrlKey && e.key === "u") {
+        history.undo(content);
+        e.preventDefault();
+        e.stopPropagation();
+
+    }
+    if (e.ctrlKey && e.key === "r") {
+        console.log("here");
+        history.redo(content);
+        e.preventDefault();
+        e.stopPropagation();
     }
 }
 

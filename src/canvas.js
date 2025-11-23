@@ -205,6 +205,7 @@ export class Canvas {
     set_textbox_text(id, text) {
         const textbox = this.#get_textbox(id);
         textbox.set_text(text);
+        textbox.populate();
         const group = this.#get_group(textbox.get_group_id());
         group?.update_size();
     }

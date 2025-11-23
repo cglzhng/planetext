@@ -73,6 +73,10 @@ body {
     list-style: none;
 }
 
+.highlighted {
+    background: skyblue;
+}
+
 .base {
     background: #eee;
 }

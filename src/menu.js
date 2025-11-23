@@ -36,8 +36,19 @@ export function setup_menu(renderer, is_mac) {
             ]
         },
         { role: 'editMenu' },
-        { role: 'viewMenu' },
-        { role: 'windowMenu' },
+        {
+            label: 'View',
+            submenu: [
+                { role: 'forceReload' },
+                { role: 'toggleDevTools' },
+                { type: 'separator' },
+                { role: 'resetZoom' },
+                { role: 'zoomIn' },
+                { role: 'zoomOut' },
+                { type: 'separator' },
+                { role: 'togglefullscreen' }
+            ]
+        }, { role: 'windowMenu' },
         {
             role: 'help',
             submenu: [

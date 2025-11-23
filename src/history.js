@@ -105,6 +105,10 @@ export class Delete extends Action {
         content.add_text_update(this.#id, this.#g_id, this.#pos);
         content.set_text_update(this.#id, this.#text);
     }
+
+    redo(content) {
+        content.remove_text_update(this.#id);
+    }
 }
 
 export class Move extends Action {
@@ -146,17 +150,23 @@ export class Move extends Action {
     undo(content) {
         content.move_text_update(this.#id, this.#old_pos, this.#old_group_id);
     }
+
+    redo(content) {
+        content.move_text_update(this.#id, this.#new_pos, this.#new_group_id);
+    }
 }
 
 export class Create extends Action {
     #id;
     #g_id;
     #text;
-    constructor(id, group_id, text) {
+    #pos;
+    constructor(id, group_id, text, pos) {
         super();
         this.#id = id;
         this.#g_id = group_id;
         this.#text = text;
+        this.#pos = pos;
     }
 
     get_group_id() {
@@ -173,6 +183,11 @@ export class Create extends Action {
 
     undo(content) {
         content.remove_text_update(this.#id);
+    }
+
+    redo(content) {
+        content.add_text_update(this.#id, this.#g_id, this.#pos);
+        content.set_text_update(this.#id, this.#text);
     }
 }
 
@@ -206,6 +221,10 @@ export class Edit extends Action {
     undo(content) {
         content.set_text_update(this.#id, this.#old_text);
     }
+
+    redo(content) {
+        content.set_text_update(this.#id, this.#new_text);
+    }
 }
 
 /*
@@ -231,15 +250,103 @@ class Snapshot {
 }
 */
 
+class ActionTagGroup {
+    #tag;
+    #history;
+
+    #box;
+    #list_box;
+    #actions = [];
+
+
+    constructor(history, tag) {
+        this.#history = history;
+        this.#tag = tag;
+        this.#box = document.createElement("div");
+
+        this.#list_box = document.createElement("ul");
+        this.#list_box.classList.add("actions");
+
+        const title = document.createElement("h6");
+        const t = document.createTextNode(tag);
+        title.appendChild(t);
+
+        this.#box.appendChild(title);
+        this.#box.appendChild(this.#list_box);
+
+        this.#box.classList.add("tag");
+    }
+
+    get_box() {
+        return this.#box;
+    }
+
+    show() {
+        this.#box.classList.remove("hidden");
+    }
+
+    hide() {
+        this.#box.classList.add("hidden");
+    }
+
+    update_visibility() {
+        if (this.#actions.length === 0) {
+            this.hide();
+        } else {
+            this.show();
+        }
+    }
+
+    add_action(action) {
+        this.#actions.push(action);
+        const node = this.#history.render_action(action);
+        insert_first(this.#list_box, node);
+        this.show();
+    }
+
+    remove_action() {
+        this.#list_box.removeChild(this.#list_box.firstChild);
+        this.#actions.pop();
+
+        this.update_visibility();
+    }
+
+    regenerate() {
+        this.#list_box.innerHTML = "";
+        for (const action of this.#actions) {
+            const node = this.#history.render_action(action);
+            insert_first(this.#list_box, node);
+        }
+        this.update_visibility();
+    }
+
+    pop_actions(text_id) {
+        const actions_to_move = this.#actions.filter(action => action.get_tracking_id() === text_id);
+        this.#actions = this.#actions.filter(action => action.get_tracking_id() !== text_id);
+
+        this.regenerate();
+
+        return actions_to_move;
+
+    }
+
+    merge_actions(actions) {
+        this.#actions = merge(actions, this.#actions, (x, y) => x.get_time() < y.get_time());
+        this.regenerate();
+    }
+}
+
 export class History {
     #next_action_time = 1;
+    #action_pointer = -1;
     #actions = [];
     #tracking = {};
 
-    #action_tags = {};
-    
+    #action_tag_groups = {};
+
     #snapshots = {};
 
+    #chrono_list = [];
     #box;
     #chrono_box;
     #tags_box;
@@ -267,117 +374,73 @@ export class History {
         return this.#tracking[id] === true;
     }
 
-/*
-    start_action_group() {
-        this.#action_groups.push(new ActionGroup());
-    }
-
-    end_action_group() {
-        const last_action_group = this.#action_groups[this.#action_groups.length - 1];
-        if (last_action_group.get_length() === 0) {
-            this.#action_groups.pop();
+    highlight_current_action() {
+        if (this.#action_pointer === -1) {
             return;
         }
-        if (last_action_group.is_move()) {
-            retag_actions();
+        this.#chrono_list[this.#action_pointer].classList.add("highlighted");
+    }
+
+    unhighlight_action(i) {
+        if (i === -1) {
+            return;
         }
-        const node = last_action_group.render();
-        if (this.#box.firstChild) {
-            this.#box.insertBefore(node, this.#box.firstChild);
-        } else {
-            this.#box.appendChild(node);
-        }
-
-    }
-*/
-
-    show_tag(t) {
-        this.#action_tags[t].box.classList.remove("hidden");
+        this.#chrono_list[i].classList.remove("highlighted");
     }
 
-    hide_tag(t) {
-        this.#action_tags[t].box.classList.add("hidden");
-    }
-
-    make_tag(tag) {
-        const box = document.createElement("div");
-
-        const list_box = document.createElement("ul");
-        list_box.classList.add("actions");
-
-        this.#action_tags[tag] = {
-            box,
-            list_box,
-            actions: [],
-        };
-
-        const title = document.createElement("h6");
-        const t = document.createTextNode(tag);
-        title.appendChild(t);
-
-        box.appendChild(title);
-        box.appendChild(list_box);
-
-        box.classList.add("tag");
-        this.#tags_box.appendChild(box);
-    }
-
-    regenerate(t) {
-        const tag = this.#action_tags[t];
-        tag.list_box.innerHTML = "";
-        for (const action of tag.actions) {
-            const node = this.render_action(action);
-            insert_first(tag.list_box, node);
-        }
+    make_tag_group(tag) {
+        const action_tag_group = new ActionTagGroup(this, tag);
+        this.#action_tag_groups[tag] = action_tag_group;
+        this.#tags_box.appendChild(action_tag_group.get_box());
     }
 
     add_action_to_tag(action) {
-        const tag = action.get_group_id();
-        this.#action_tags[tag].actions.push(action);
-        const node = this.render_action(action);
-        insert_first(this.#action_tags[tag].list_box, node);
-
-        this.show_tag(action.get_group_id());
+        this.#action_tag_groups[action.get_group_id()].add_action(action);
     }
 
     remove_action_from_tag(action) {
-        const t = action.get_group_id();
-        const tag = this.#action_tags[t];
-        tag.list_box.removeChild(tag.list_box.firstChild);
-        tag.actions.pop();
-
-        if (tag.actions.length === 0) {
-            this.hide_tag(t);
-        }
     }
 
     move_actions(text_id, o, n) {
-        const old_tag = this.#action_tags[o];
-        const new_tag = this.#action_tags[n];
+        const old_tag = this.#action_tag_groups[o];
+        const new_tag = this.#action_tag_groups[n];
 
+        const actions_to_move = old_tag.pop_actions(text_id);
+        new_tag.merge_actions(actions_to_move);
+    }
 
-        const actions_to_move = old_tag.actions.filter(action => action.get_tracking_id() === text_id);
-        old_tag.actions = old_tag.actions.filter(action => action.get_tracking_id() !== text_id);
+    remove_actions_after_current() {
+        for (let i = this.#chrono_list.length - 1; i > this.#action_pointer; --i) {
+            const action = this.#actions[i];
+            if (!(action instanceof Move)) {
+                const action_tag_group = this.#action_tag_groups[action.get_group_id()];
+                action_tag_group.remove_action();
 
-        new_tag.actions = merge(actions_to_move, new_tag.actions, (x, y) => x.get_time() < y.get_time());
-
-        this.regenerate(o);
-        this.regenerate(n);
-
-        this.show_tag(n);
-        if (old_tag.actions.length === 0) {
-            this.hide_tag(o);
+            }
+            this.#chrono_list[i].remove();
         }
+
+        this.#actions = this.#actions.slice(0, this.#action_pointer + 1);
+        this.#chrono_list = this.#chrono_list.slice(0, this.#action_pointer + 1);
     }
 
     add_action(action) {
+        if (this.#action_pointer < this.#actions.length - 1) {
+            this.remove_actions_after_current();
+        }
         this.#actions.push(action);
         this.#tracking[action.get_tracking_id()] = true;
+        this.unhighlight_action(this.#action_pointer);
+        ++this.#action_pointer;
+
         const node = this.render_action(action);
         insert_first(this.#chrono_box, node);
 
-        if (this.#action_tags[action.get_group_id()] === undefined) {
-            this.make_tag(action.get_group_id());
+        this.#chrono_list.push(node);
+        this.highlight_current_action();
+
+        if (this.#action_tag_groups[action.get_group_id()] === undefined) {
+            this.make_tag_group(action.get_group_id());
         }
 
         if (!(action instanceof Move)) {
@@ -400,17 +463,34 @@ export class History {
     }
 
     undo(content) {
-        if (this.#actions.length === 0) {
+        if (this.#action_pointer === -1) {
             return;
         }
-        const action = this.#actions.pop();
+        const action = this.#actions[this.#action_pointer];
         action.undo(content);
-        this.#chrono_box.firstChild.remove();
 
         if (action instanceof Move) {
             this.move_actions(action.get_tracking_id(), action.get_group_id(), action.get_old_group_id());
-        } else {
-            this.remove_action_from_tag(action);
+        }
+
+        this.unhighlight_action(this.#action_pointer);
+        --this.#action_pointer;
+        this.highlight_current_action();
+    }
+
+    redo(content) {
+        if (this.#action_pointer === this.#actions.length - 1) {
+            return;
+        }
+        this.unhighlight_action(this.#action_pointer);
+        ++this.#action_pointer;
+        this.highlight_current_action();
+
+        const action = this.#actions[this.#action_pointer];
+        action.redo(content);
+
+        if (action instanceof Move) {
+            this.move_actions(action.get_tracking_id(), action.get_old_group_id(), action.get_group_id());
         }
     }
 }
