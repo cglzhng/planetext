@@ -10,7 +10,7 @@ let sidebar;
 let base;
 
 const content = new Content();
-const history = new History();
+const history = new History(content);
 const canvas = new Canvas(content, history, CANVAS_WIDTH, CANVAS_HEIGHT);
 
 window.addEventListener("load", startup);
@@ -42,14 +42,14 @@ function startup() {
 
 function keybinds(e) {
     if (e.ctrlKey && e.key === "u") {
-        history.undo(content);
+        history.undo();
         e.preventDefault();
         e.stopPropagation();
 
     }
     if (e.ctrlKey && e.key === "r") {
         console.log("here");
-        history.redo(content);
+        history.redo();
         e.preventDefault();
         e.stopPropagation();
     }

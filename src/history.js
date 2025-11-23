@@ -256,7 +256,10 @@ class ActionTagGroup {
 
     #box;
     #list_box;
+    #list = [];
     #actions = [];
+
+    #action_pointer = -1;
 
 
     constructor(history, tag) {
@@ -297,25 +300,121 @@ class ActionTagGroup {
         }
     }
 
-    add_action(action) {
-        this.#actions.push(action);
+    highlight_current_action() {
+        if (this.#action_pointer === -1) {
+            return;
+        }
+        this.#list[this.#action_pointer].classList.add("highlighted");
+    }
+
+    unhighlight_action(i) {
+        if (i === -1) {
+            return;
+        }
+        this.#list[i].classList.remove("highlighted");
+    }
+
+    increment_action_pointer() {
+        this.unhighlight_action(this.#action_pointer);
+        ++this.#action_pointer;
+        this.highlight_current_action();
+    }
+
+    decrement_action_pointer() {
+        this.unhighlight_action(this.#action_pointer);
+        --this.#action_pointer;
+        this.highlight_current_action();
+    }
+
+    move_action_pointer(i) {
+        if (this.#action_pointer < i) {
+            while (this.#action_pointer < i) {
+                this.redo();
+            }
+        }
+        else if (this.#action_pointer > i) {
+            while (this.#action_pointer > i) {
+                this.undo();
+            }
+        }
+    }
+
+    undo() {
+        const action = this.#actions[this.#action_pointer];
+        if (!this.is_null_action(action)) {
+            this.#history.undo_action_from_tag(action);
+        }
+        this.decrement_action_pointer();
+    }
+
+    redo() {
+        this.increment_action_pointer();
+        const action = this.#actions[this.#action_pointer];
+        if (!this.is_null_action(action)) {
+            this.#history.redo_action_from_tag(action);
+        }
+    }
+
+    redo_all() {
+        this.move_action_pointer(this.#actions.length - 1);
+    }
+
+    make_action_node(action) {
         const node = this.#history.render_action(action);
         insert_first(this.#list_box, node);
+        this.#list.push(node);
+        if (this.is_null_action(action)) {
+            node.classList.add("hidden");
+        }
+        return node;
+    }
+
+    is_null_action(action) {
+        return (action instanceof Move) && (this.#tag !== action.get_group_id() || this.#tag !== action.get_old_group_id());
+    }
+
+    add_click_event(node) {
+        const i = this.#action_pointer;
+        node.addEventListener("click", () => {
+            console.log(i);
+            this.#history.handle_click_tag_group(this.#tag);
+            this.move_action_pointer(i);
+        });
+
+    }
+
+
+    add_action(action) {
+        this.#actions.push(action);
+        const node = this.make_action_node(action);
+
+        this.increment_action_pointer();
+        if (!this.is_null_action(action)) {
+            this.add_click_event(node);
+        }
+
         this.show();
     }
 
     remove_action() {
         this.#list_box.removeChild(this.#list_box.firstChild);
         this.#actions.pop();
+        this.#list.pop();
 
+        this.decrement_action_pointer();
         this.update_visibility();
     }
 
     regenerate() {
         this.#list_box.innerHTML = "";
+        this.#list = [];
+        this.#action_pointer = -1;
         for (const action of this.#actions) {
-            const node = this.#history.render_action(action);
-            insert_first(this.#list_box, node);
+            const node = this.make_action_node(action);
+            this.increment_action_pointer();
+            if (!this.is_null_action(action)) {
+                this.add_click_event(node);
+            }
         }
         this.update_visibility();
     }
@@ -327,7 +426,6 @@ class ActionTagGroup {
         this.regenerate();
 
         return actions_to_move;
-
     }
 
     merge_actions(actions) {
@@ -337,8 +435,12 @@ class ActionTagGroup {
 }
 
 export class History {
+    #content;
+
     #next_action_time = 1;
     #action_pointer = -1;
+    #tag_pointer = null;
+
     #actions = [];
     #tracking = {};
 
@@ -352,7 +454,9 @@ export class History {
     #tags_box;
 
 
-    constructor() {
+    constructor(content) {
+        this.#content = content;
+
         this.#box = document.createElement("div");
         this.#box.classList.add("history");
 
@@ -388,6 +492,37 @@ export class History {
         this.#chrono_list[i].classList.remove("highlighted");
     }
 
+    increment_action_pointer() {
+        this.unhighlight_action(this.#action_pointer);
+        ++this.#action_pointer;
+        this.highlight_current_action();
+    }
+
+    decrement_action_pointer() {
+        this.unhighlight_action(this.#action_pointer);
+        --this.#action_pointer;
+        this.highlight_current_action();
+    }
+
+    move_action_pointer(i) {
+        if (this.#action_pointer === i) {
+            return;
+        }
+        for (const tag_group of Object.values(this.#action_tag_groups)) {
+            tag_group.redo_all();
+        }
+        if (this.#action_pointer < i) {
+            while (this.#action_pointer < i) {
+                this.redo(this.#content);
+            }
+        }
+        else if (this.#action_pointer > i) {
+            while (this.#action_pointer > i) {
+                this.undo(this.#content);
+            }
+        }
+    }
+
     make_tag_group(tag) {
         const action_tag_group = new ActionTagGroup(this, tag);
         this.#action_tag_groups[tag] = action_tag_group;
@@ -395,10 +530,8 @@ export class History {
     }
 
     add_action_to_tag(action) {
+        console.log(action);
         this.#action_tag_groups[action.get_group_id()].add_action(action);
-    }
-
-    remove_action_from_tag(action) {
     }
 
     move_actions(text_id, o, n) {
@@ -407,6 +540,19 @@ export class History {
 
         const actions_to_move = old_tag.pop_actions(text_id);
         new_tag.merge_actions(actions_to_move);
+    }
+
+    handle_click_tag_group(tag) {
+        if (this.#tag_pointer === null || this.#tag_pointer === tag) {
+            this.#tag_pointer = tag;
+            return;
+        }
+        console.log("redoing all");
+        for (const [t, tag_group] of Object.entries(this.#action_tag_groups)) {
+            if (t !== tag) {
+                tag_group.redo_all();
+            }
+        }
     }
 
     remove_actions_after_current() {
@@ -430,23 +576,26 @@ export class History {
         }
         this.#actions.push(action);
         this.#tracking[action.get_tracking_id()] = true;
-        this.unhighlight_action(this.#action_pointer);
-        ++this.#action_pointer;
 
         const node = this.render_action(action);
         insert_first(this.#chrono_box, node);
 
         this.#chrono_list.push(node);
-        this.highlight_current_action();
+        this.increment_action_pointer();
+        const i = this.#action_pointer;
+        node.addEventListener("click", () => {
+            this.move_action_pointer(i);
+            this.#tag_pointer = null;
+        });
 
         if (this.#action_tag_groups[action.get_group_id()] === undefined) {
             this.make_tag_group(action.get_group_id());
         }
 
-        if (!(action instanceof Move)) {
-            this.add_action_to_tag(action);
-        } else {
+        this.add_action_to_tag(action);
+        if ((action instanceof Move) && (action.get_old_group_id() !== action.get_group_id())) {
             this.move_actions(action.get_tracking_id(), action.get_old_group_id(), action.get_group_id());
+        } else {
         }
     }
 
@@ -462,35 +611,39 @@ export class History {
         return li;
     }
 
-    undo(content) {
+    undo() {
         if (this.#action_pointer === -1) {
             return;
         }
         const action = this.#actions[this.#action_pointer];
-        action.undo(content);
+        action.undo(this.#content);
 
-        if (action instanceof Move) {
+        if ((action instanceof Move) && (action.get_old_group_id() !== action.get_group_id())) {
             this.move_actions(action.get_tracking_id(), action.get_group_id(), action.get_old_group_id());
         }
 
-        this.unhighlight_action(this.#action_pointer);
-        --this.#action_pointer;
-        this.highlight_current_action();
+        this.decrement_action_pointer();
     }
 
-    redo(content) {
+    redo() {
         if (this.#action_pointer === this.#actions.length - 1) {
             return;
         }
-        this.unhighlight_action(this.#action_pointer);
-        ++this.#action_pointer;
-        this.highlight_current_action();
+        this.increment_action_pointer();
 
         const action = this.#actions[this.#action_pointer];
-        action.redo(content);
+        action.redo(this.#content);
 
-        if (action instanceof Move) {
+        if ((action instanceof Move) && (action.get_old_group_id() !== action.get_group_id())) {
             this.move_actions(action.get_tracking_id(), action.get_old_group_id(), action.get_group_id());
         }
+    }
+
+    undo_action_from_tag(action) {
+        action.undo(this.#content);
+    }
+
+    redo_action_from_tag(action) {
+        action.redo(this.#content);
     }
 }
