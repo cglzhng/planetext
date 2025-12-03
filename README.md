@@ -2,7 +2,7 @@
 
 2D text editor with structured change tracking and versioning.
 
-Dependencies: Electron
+Dependencies: npm, Electron
 
 To build:
 
